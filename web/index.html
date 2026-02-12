@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat IA</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        #chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: scroll; }
+        #mensaje { width: 80%; }
+        button { width: 18%; }
+        .user { color: blue; }
+        .bot { color: green; }
+        p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Chat IA</h1>
+    <div id="chat"></div>
+    <input type="text" id="mensaje" placeholder="Escribe aquí...">
+    <button onclick="enviarMensaje()">Enviar</button>
+    <button onclick="hablarIA()">🎤 Hablar</button>
+
+    <script src="script.js"></script>
+</body>
+</html>
