@@ -1,76 +1,93 @@
-import subprocess
-import speech_recognition as sr
-import ollama
+# asistente.py
+import requests
+from fastapi import FastAPI, Request
+import uvicorn
 
-# Inicializar el motor de voz
-def hablar(texto):
-    """
-    Función para que el asistente hable usando la voz de macOS.
-    """
-    subprocess.run(["say", "-v", "Monica", "-r", "180", texto])
+# -------------------------------
+# CONFIGURACIÓN WHATSAPP (Whapi.Cloud)
+# -------------------------------
+WHAPI_TOKEN = "yPp49ofCErBqz8eozhKtz8c1r0ksNFf8AQUI_VA_TU_TOKEN_DE_WHAPI"
+WHAPI_URL = "https://gate.whapi.cloud/"
 
-def escuchar():
-    recognizer = sr.Recognizer()
+# -------------------------------
+# BACKEND FASTAPI
+# -------------------------------
+app = FastAPI()
 
-    # 🔧 AJUSTES CLAVE PARA QUE NO CORTE FRASES
-    recognizer.pause_threshold = 1.2        # segundos de silencio para parar
-    recognizer.phrase_threshold = 0.3
-    recognizer.non_speaking_duration = 0.5
-    recognizer.energy_threshold = 300
+# Guardamos información de clientes temporalmente (puedes usar DB después)
+clientes = {}
 
-    with sr.Microphone() as source:
-        print("🎤 Escuchando...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        audio = recognizer.listen(source)  # escucha hasta que detecta silencio
+# -------------------------------
+# FUNCIONES DE ENVÍO
+# -------------------------------
+def enviar_mensaje(numero, texto):
+    payload = {"to": numero, "type": "text", "text": {"body": texto}}
+    headers = {"Authorization": f"Bearer {WHAPI_TOKEN}", "Content-Type": "application/json"}
+    requests.post(WHAPI_URL, json=payload, headers=headers)
 
-    try:
-        texto = recognizer.recognize_google(audio, language="es-ES")
-        print("🗣️ Dijiste:", texto)
-        return texto.lower()
-    except sr.UnknownValueError:
-        return ""
-    except sr.RequestError:
-        return ""
+def enviar_bienvenida(numero):
+    payload = {
+        "to": numero,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": "Muy buenas, soy tu asistente del taller.\n¿Para qué desea su cita?"},
+            "action": {
+                "buttons": [
+                    {"type": "reply", "reply": {"id": "mantenimiento", "title": "Mantenimiento"}},
+                    {"type": "reply", "reply": {"id": "reparacion", "title": "Reparación / Avería"}},
+                    {"type": "reply", "reply": {"id": "otra", "title": "Otra consulta"}}
+                ]
+            }
+        }
+    }
+    headers = {"Authorization": f"Bearer {WHAPI_TOKEN}", "Content-Type": "application/json"}
+    requests.post(WHAPI_URL, json=payload, headers=headers)
 
-# -------- IA (Ollama) --------
-mensajes = []
+# -------------------------------
+# WEBHOOK PARA RECIBIR MENSAJES
+# -------------------------------
+@app.post("/webhook")
+async def whatsapp_webhook(req: Request):
+    data = await req.json()
+    numero = data.get("from")
+    mensaje = data.get("message", {}).get("text", {}).get("body", "")
+    boton = data.get("message", {}).get("interactive", {}).get("button_reply", {}).get("id")
 
-def ask_ai(texto):
-    global mensajes
+    if not numero:
+        return {"status": "error", "detail": "No hay número de cliente"}
 
-    mensajes.append({"role": "user", "content": texto})
+    if numero not in clientes:
+        clientes[numero] = {}
 
-    response = ollama.chat(
-        model="llama3",
-        messages=mensajes
-    )
+    # Paso 1: el cliente pulsa un botón
+    if boton:
+        clientes[numero]["servicio"] = boton
+        enviar_mensaje(numero, "Perfecto. Por favor, indíqueme su nombre completo y la matrícula de su coche.")
+        return {"status": "ok"}
 
-    respuesta = response["message"]["content"]
-    mensajes.append({"role": "assistant", "content": respuesta})
+    # Paso 2: el cliente envía nombre y matrícula
+    if "nombre" not in clientes[numero]:
+        # Simple: suponemos que envía "Nombre Matricula"
+        partes = mensaje.split()
+        clientes[numero]["nombre"] = partes[0]
+        clientes[numero]["matricula"] = partes[-1]
+        enviar_mensaje(numero, "Gracias. Ahora indique el día y la hora que desea su cita.")
+        return {"status": "ok"}
 
-    return respuesta
+    # Paso 3: el cliente envía fecha y hora
+    if "fecha" not in clientes[numero]:
+        clientes[numero]["fecha"] = mensaje
+        servicio = clientes[numero]["servicio"]
+        nombre = clientes[numero]["nombre"]
+        matricula = clientes[numero]["matricula"]
+        enviar_mensaje(numero, f"Su cita ha sido registrada: {mensaje}, matrícula {matricula}, servicio {servicio}. Gracias, {nombre}.")
+        return {"status": "ok"}
 
-# -------- PROGRAMA PRINCIPAL --------
-hablar("Hola, soy tu asistente virtual. ¿En qué puedo ayudarte?")
-
-while True:
-    # 1️⃣ Escuchar al usuario
-    comando = escuchar()
-
-    # Si no escuchó nada, vuelve a intentar
-    if not comando:
-        continue
-
-    print("Usuario:", comando)
-
-    # 2️⃣ Salida del asistente
-    if "salir" in comando.lower() or "adiós" in comando.lower():
-        hablar("Hasta luego")
-        break
-
-    # 3️⃣ Procesar la respuesta del modelo
-    respuesta = ask_ai(comando)
-    print("Asistente:", respuesta)
-
-    # 4️⃣ Hablar la respuesta (mientras habla, no escuchamos)
-    hablar(respuesta)
+    return {"status": "ok"}
+    
+# -------------------------------
+# EJECUCIÓN LOCAL
+# -------------------------------
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
