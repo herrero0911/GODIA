@@ -7,7 +7,7 @@ import uvicorn
 # -------------------------------
 # CONFIGURACIÓN WHATSAPP (Whapi.Cloud)
 # -------------------------------
-WHAPI_TOKEN = "yPp49ofCErBqz8eozhKtz8c1r0ksNFf8"
+WHAPI_TOKEN = "yPp49ofCErBqz8eozhKtz8c1r0ksNFf8AQUI_VA_TU_TOKEN_DE_WHAPI"
 WHAPI_URL = "https://gate.whapi.cloud/"
 
 # -------------------------------
